@@ -423,7 +423,7 @@ class YCBVideoDataset(data.Dataset):
 
         # foreground mask
         seg = seg_tensor[:,:,2] + 256*seg_tensor[:,:,1] + 256*256*seg_tensor[:,:,0]
-        mask = (seg != 0).unsqueeze(0).repeat((3, 1, 1)).float()
+        seg_input = seg.clone().cpu().numpy()
 
         # RGB to BGR order
         im = image_tensor.cpu().numpy()
@@ -479,11 +479,27 @@ class YCBVideoDataset(data.Dataset):
         # boxes, class labels and binary masks
         boxes = []
         class_ids = []
-        binary_masks = np.zeros((num_target, self._height, self._width), dtype=np.float32)
+        binary_masks = []
+        ratios = []
         for i in range(num_target):
             cls = int(indexes_target[i])
             T = poses_all[i][:3]
             qt = poses_all[i][3:]
+
+            # render to compare mask
+            self.renderer.set_poses([poses_all[i]])
+            self.renderer.render([self.cfg.TRAIN.CLASSES[cls]-1], image_tensor, seg_tensor)
+            seg_tensor = seg_tensor.flip(0)
+            seg = seg_tensor[:,:,2] + 256*seg_tensor[:,:,1] + 256*256*seg_tensor[:,:,0]
+            seg_target = seg.clone().cpu().numpy()
+            non_occluded = np.sum(np.logical_and(seg_target > 0, seg_target == seg_input)).astype(np.float)
+            area = np.sum(seg_target > 0).astype(np.float)
+            if area > 0:
+                occluded_ratio = 1.0 - non_occluded / area
+            else:
+                occluded_ratio = 1.0
+            if occluded_ratio > 0.9:
+                continue
 
             # compute box
             x3d = np.ones((4, self._points_all.shape[1]), dtype=np.float32)
@@ -505,7 +521,8 @@ class YCBVideoDataset(data.Dataset):
             class_ids.append(cls)
 
             # mask
-            binary_masks[i, :, :] = (im_label == cls).astype(np.float32)
+            binary_masks.append((im_label == cls).astype(np.float32))
+            ratios.append(occluded_ratio)
 
         boxes = torch.as_tensor(boxes).reshape(-1, 4)  # guard against no boxes
         target = BoxList(boxes, (self._width, self._height), mode="xyxy")
@@ -513,7 +530,15 @@ class YCBVideoDataset(data.Dataset):
         class_ids = torch.tensor(class_ids)
         target.add_field("labels", class_ids)
 
-        masks = SegmentationMask(torch.as_tensor(binary_masks), (self._width, self._height), "mask")
+        ratios = torch.tensor(ratios)
+        target.add_field("ratios", ratios)
+
+        n = len(binary_masks)
+        masks_np = np.zeros((n, self._height, self._width), dtype=np.float32)
+        for i in range(n):
+            masks_np[i, :, :] = binary_masks[i]
+
+        masks = SegmentationMask(torch.as_tensor(masks_np), (width, height), "mask")
         target.add_field("masks", masks)
         target = target.clip_to_image(remove_empty=True)
 
@@ -544,7 +569,8 @@ class YCBVideoDataset(data.Dataset):
             target = self._get_label_blob(roidb, self._num_classes, im_scale, height, width)
             target = target.clip_to_image(remove_empty=True)
 
-        # self._visualize(img, target)
+        if self.cfg.TRAIN.VISUALIZE:
+            self._visualize(img, target)
 
         return img, target, index
 
@@ -684,6 +710,10 @@ class YCBVideoDataset(data.Dataset):
         masks = SegmentationMask(torch.as_tensor(masks_np), (width, height), "mask")
         target.add_field("masks", masks)
 
+        ratios = np.zeros((n, ), dtype=np.float32)
+        ratios = torch.tensor(ratios)
+        target.add_field("ratios", ratios)
+
         return target
 
 
@@ -692,6 +722,7 @@ class YCBVideoDataset(data.Dataset):
         boxes = target.bbox.numpy()
         labels = target.extra_fields['labels']
         masks = target.extra_fields['masks'].instances.masks
+        ratios = target.extra_fields['ratios'].numpy()
 
         m = 3
         n = 4
@@ -733,6 +764,7 @@ class YCBVideoDataset(data.Dataset):
             ax = fig.add_subplot(m, n, start)
             start += 1
             plt.imshow(mask)
+            ax.set_title('%.2f'%(ratios[i]))
 
         plt.show()
 
