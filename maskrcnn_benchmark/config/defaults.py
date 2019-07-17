@@ -1,6 +1,6 @@
 # Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved.
 import os
-
+import numpy as np
 from yacs.config import CfgNode as CN
 
 
@@ -446,6 +446,50 @@ _C.TEST.BBOX_AUG.MAX_SIZE = 4000
 
 # Horizontal flip at each scale
 _C.TEST.BBOX_AUG.SCALE_H_FLIP = False
+
+
+# my own configuration #
+_C.MODE = 'TRAIN'
+_C.DATA_PATH = ''
+
+_C.TRAIN = CN()
+_C.TRAIN.CLASSES = (1,2,3)
+_C.TRAIN.MAX_ITERS_PER_EPOCH = 1000000
+_C.TRAIN.VISUALIZE = False
+_C.TRAIN.USE_FLIPPED = True
+_C.TRAIN.CHROMATIC = True
+_C.TRAIN.ADD_NOISE = False
+_C.TRAIN.SCALES_BASE = (0.25, 0.5, 1.0, 2.0, 3.0)
+_C.TRAIN.UNIFORM_POSE_INTERVAL = 15
+
+# synthetic training
+_C.TRAIN.SYNTHESIZE = False
+_C.TRAIN.SYN_ONLINE = False
+_C.TRAIN.SYN_WIDTH = 640
+_C.TRAIN.SYN_HEIGHT = 480
+_C.TRAIN.SYNITER = 0
+_C.TRAIN.SYNNUM = 80000
+_C.TRAIN.SYN_RATIO = 1
+_C.TRAIN.SYN_CLASS_INDEX = 1
+_C.TRAIN.SYN_TNEAR = 0.5
+_C.TRAIN.SYN_TFAR = 2.0
+_C.TRAIN.SYN_BACKGROUND_SPECIFIC = False
+_C.TRAIN.SYN_BACKGROUND_SUBTRACT_MEAN = False
+_C.TRAIN.SYN_SAMPLE_OBJECT = True
+_C.TRAIN.SYN_SAMPLE_POSE = True
+_C.TRAIN.SYN_STD_ROTATION = 15
+_C.TRAIN.SYN_STD_TRANSLATION = 0.05
+_C.TRAIN.SYN_MIN_OBJECT = 5
+_C.TRAIN.SYN_MAX_OBJECT = 8
+_C.TRAIN.SYN_TNEAR = 0.5
+_C.TRAIN.SYN_TFAR = 2.0
+_C.TRAIN.SYN_BOUND = 0.4
+_C.TRAIN.SYN_SAMPLE_DISTRACTOR = True
+
+# synthetic testing
+_C.TEST.SYNTHESIZE = False
+_C.TEST.VISUALIZE = False
+_C.TEST.SCALES_BASE = (0.25, 0.5, 1.0, 2.0, 3.0)
 
 
 # ---------------------------------------------------------------------------- #

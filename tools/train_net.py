@@ -1,5 +1,5 @@
 # Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved.
-r"""
+"""
 Basic training script for PyTorch
 """
 
@@ -11,6 +11,7 @@ import argparse
 import os
 
 import torch
+import _init_paths
 from maskrcnn_benchmark.config import cfg
 from maskrcnn_benchmark.data import make_data_loader
 from maskrcnn_benchmark.solver import make_lr_scheduler

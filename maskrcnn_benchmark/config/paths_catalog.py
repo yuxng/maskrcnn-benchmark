@@ -103,6 +103,14 @@ class DatasetCatalog(object):
         "cityscapes_fine_instanceonly_seg_test_cocostyle": {
             "img_dir": "cityscapes/images",
             "ann_file": "cityscapes/annotations/instancesonly_filtered_gtFine_test.json"
+        },
+        "ycb_video_train": {
+            "data_dir": "ycb_video",
+            "image_set": "train"
+        },
+        "ycb_video_keyframe": {
+            "data_dir": "ycb_video",
+            "image_set": "keyframe"
         }
     }
 
@@ -128,6 +136,17 @@ class DatasetCatalog(object):
             )
             return dict(
                 factory="PascalVOCDataset",
+                args=args,
+            )
+        elif "ycb" in name:
+            data_dir = DatasetCatalog.DATA_DIR
+            attrs = DatasetCatalog.DATASETS[name]
+            args = dict(
+                image_set=attrs["image_set"],
+                data_dir=os.path.join(data_dir, attrs["data_dir"]),
+            )
+            return dict(
+                factory="YCBVideoDataset",
                 args=args,
             )
         raise RuntimeError("Dataset not available: {}".format(name))
