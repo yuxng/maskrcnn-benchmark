@@ -129,11 +129,12 @@ class YCBVideoDataset(data.Dataset):
         assert os.path.exists(self._data_path), \
                 'Data path does not exist: {}'.format(self._data_path)
 
-        print('loading 3D models')
-        self.renderer = YCBRenderer(width=self.cfg.TRAIN.SYN_WIDTH, height=self.cfg.TRAIN.SYN_HEIGHT, render_marker=False)
-        self.renderer.load_objects(self.model_mesh_paths, self.model_texture_paths, self.model_colors)
-        self.renderer.set_camera_default()
-        print(self.model_mesh_paths)
+        if self.cfg.MODE == 'TRAIN':
+            print('loading 3D models')
+            self.renderer = YCBRenderer(width=self.cfg.TRAIN.SYN_WIDTH, height=self.cfg.TRAIN.SYN_HEIGHT, gpu_id=1, render_marker=False)
+            self.renderer.load_objects(self.model_mesh_paths, self.model_texture_paths, self.model_colors)
+            self.renderer.set_camera_default()
+            print(self.model_mesh_paths)
 
 
     @property

@@ -4,6 +4,7 @@ import time
 import os
 
 import torch
+import numpy as np
 from tqdm import tqdm
 
 from maskrcnn_benchmark.config import cfg
@@ -13,6 +14,13 @@ from ..utils.comm import all_gather
 from ..utils.comm import synchronize
 from ..utils.timer import Timer, get_time_str
 from .bbox_aug import im_detect_bbox_aug
+from demo.predictor import COCODemo
+
+coco_demo = COCODemo(
+    cfg,
+    min_image_size=800,
+    confidence_threshold=0.7,
+)
 
 
 def compute_on_dataset(model, data_loader, device, timer=None):
@@ -33,10 +41,48 @@ def compute_on_dataset(model, data_loader, device, timer=None):
                     torch.cuda.synchronize()
                 timer.toc()
             output = [o.to(cpu_device) for o in output]
+
+            if cfg.TEST.VISUALIZE:
+                _visualize(images, output[0])
+
         results_dict.update(
             {img_id: result for img_id, result in zip(image_ids, output)}
         )
     return results_dict
+
+
+def _visualize(image, predictions):
+
+    PIXEL_MEANS = np.array([[[102.9801, 115.9465, 122.7717]]])
+    im = image.tensors[0].cpu().numpy()
+    im = im.transpose((1, 2, 0))
+    im += PIXEL_MEANS
+    im = im[:, :, (2, 1, 0)]
+    im = np.clip(im, 0, 255)
+    im = im.astype(np.uint8)
+
+    if predictions.has_field("mask"):
+        # if we have masks, paste the masks in the right position
+        # in the image, as defined by the bounding boxes
+        masks = predictions.get_field("mask")
+        # always single image is passed at a time
+        masks = coco_demo.masker([masks], [predictions])[0]
+        predictions.add_field("mask", masks)
+
+    top_predictions = coco_demo.select_top_predictions(predictions)
+    result = im.copy()
+    result = coco_demo.overlay_boxes(result, top_predictions)
+    result = coco_demo.overlay_mask(result, top_predictions)
+    result = coco_demo.overlay_class_names(result, top_predictions)
+
+    import matplotlib.pyplot as plt    
+    fig = plt.figure()
+    ax = fig.add_subplot(1, 1, 1)
+    plt.imshow(result)
+    ax.set_title('color')
+    plt.show()
+
+    return result
 
 
 def _accumulate_predictions_from_multiple_gpus(predictions_per_gpu):
@@ -72,6 +118,7 @@ def inference(
         expected_results_sigma_tol=4,
         output_folder=None,
 ):
+    coco_demo.CATEGORIES = data_loader.dataset._classes
     # convert to a torch.device for efficiency
     device = torch.device(device)
     num_devices = get_world_size()

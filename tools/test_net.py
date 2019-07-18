@@ -54,6 +54,7 @@ def main():
 
     cfg.merge_from_file(args.config_file)
     cfg.merge_from_list(args.opts)
+    cfg.MODE = 'TEST'
     cfg.freeze()
 
     save_dir = ""
