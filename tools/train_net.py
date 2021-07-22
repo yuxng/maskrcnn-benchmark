@@ -1,17 +1,19 @@
+#!/usr/bin/env python3
+
 # Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved.
-"""
+r"""
 Basic training script for PyTorch
 """
 
 # Set up custom environment before nearly anything else is imported
 # NOTE: this should be the first import (no not reorder)
+import _init_paths
 from maskrcnn_benchmark.utils.env import setup_environment  # noqa F401 isort:skip
 
 import argparse
 import os
 
 import torch
-import _init_paths
 from maskrcnn_benchmark.config import cfg
 from maskrcnn_benchmark.data import make_data_loader
 from maskrcnn_benchmark.solver import make_lr_scheduler
@@ -55,7 +57,7 @@ def train(cfg, local_rank, distributed):
         )
 
     arguments = {}
-    arguments["iteration"] = 0
+    arguments["iteration"] = cfg.SOLVER.START_ITER
 
     output_dir = cfg.OUTPUT_DIR
 
@@ -73,16 +75,25 @@ def train(cfg, local_rank, distributed):
         start_iter=arguments["iteration"],
     )
 
+    test_period = cfg.SOLVER.TEST_PERIOD
+    if test_period > 0:
+        data_loader_val = make_data_loader(cfg, is_train=False, is_distributed=distributed, is_for_period=True)
+    else:
+        data_loader_val = None
+
     checkpoint_period = cfg.SOLVER.CHECKPOINT_PERIOD
 
     do_train(
+        cfg,
         model,
         data_loader,
+        data_loader_val,
         optimizer,
         scheduler,
         checkpointer,
         device,
         checkpoint_period,
+        test_period,
         arguments,
     )
 
@@ -113,6 +124,7 @@ def run_test(cfg, model, distributed):
             dataset_name=dataset_name,
             iou_types=iou_types,
             box_only=False if cfg.MODEL.RETINANET_ON else cfg.MODEL.RPN_ONLY,
+            bbox_aug=cfg.TEST.BBOX_AUG.ENABLED,
             device=cfg.MODEL.DEVICE,
             expected_results=cfg.TEST.EXPECTED_RESULTS,
             expected_results_sigma_tol=cfg.TEST.EXPECTED_RESULTS_SIGMA_TOL,

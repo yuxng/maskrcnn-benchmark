@@ -2,7 +2,7 @@
 """Centralized catalog of paths."""
 
 import os
-
+from copy import deepcopy
 
 class DatasetCatalog(object):
     DATA_DIR = "datasets"
@@ -92,6 +92,9 @@ class DatasetCatalog(object):
             "split": "test"
             # PASCAL VOC2012 doesn't made the test annotations available, so there's no json annotation
         },
+
+        ##############################################
+        # These ones are deprecated, should be removed
         "cityscapes_fine_instanceonly_seg_train_cocostyle": {
             "img_dir": "cityscapes/images",
             "ann_file": "cityscapes/annotations/instancesonly_filtered_gtFine_train.json"
@@ -104,14 +107,46 @@ class DatasetCatalog(object):
             "img_dir": "cityscapes/images",
             "ann_file": "cityscapes/annotations/instancesonly_filtered_gtFine_test.json"
         },
-        "ycb_video_train": {
-            "data_dir": "ycb_video",
-            "image_set": "train"
+        ##############################################
+
+        "cityscapes_poly_instance_train": {
+            "img_dir": "cityscapes/leftImg8bit/",
+            "ann_dir": "cityscapes/gtFine/",
+            "split": "train",
+            "mode": "poly",
         },
-        "ycb_video_keyframe": {
-            "data_dir": "ycb_video",
-            "image_set": "keyframe"
-        }
+        "cityscapes_poly_instance_val": {
+            "img_dir": "cityscapes/leftImg8bit",
+            "ann_dir": "cityscapes/gtFine",
+            "split": "val",
+            "mode": "poly",
+        },
+        "cityscapes_poly_instance_minival": {
+            "img_dir": "cityscapes/leftImg8bit",
+            "ann_dir": "cityscapes/gtFine",
+            "split": "val",
+            "mode": "poly",
+            "mini": 10,
+        },
+        "cityscapes_mask_instance_train": {
+            "img_dir": "cityscapes/leftImg8bit/",
+            "ann_dir": "cityscapes/gtFine/",
+            "split": "train",
+            "mode": "mask",
+        },
+        "cityscapes_mask_instance_val": {
+            "img_dir": "cityscapes/leftImg8bit",
+            "ann_dir": "cityscapes/gtFine",
+            "split": "val",
+            "mode": "mask",
+        },
+        "cityscapes_mask_instance_minival": {
+            "img_dir": "cityscapes/leftImg8bit",
+            "ann_dir": "cityscapes/gtFine",
+            "split": "val",
+            "mode": "mask",
+            "mini": 10,
+        },
     }
 
     @staticmethod
@@ -138,16 +173,23 @@ class DatasetCatalog(object):
                 factory="PascalVOCDataset",
                 args=args,
             )
-        elif "ycb" in name:
-            data_dir = DatasetCatalog.DATA_DIR
-            attrs = DatasetCatalog.DATASETS[name]
-            args = dict(
-                image_set=attrs["image_set"],
-                data_dir=os.path.join(data_dir, attrs["data_dir"]),
-            )
+        elif name == 'tabletop_object_dataset_rgb':
+            # this stuff is hard-coded
             return dict(
-                factory="YCBVideoDataset",
-                args=args,
+                factory="Tabletop_Object_Dataset_RGB",
+                args={},
+            )
+        elif name == 'tabletop_object_dataset_depth':
+            # this stuff is hard-coded
+            return dict(
+                factory="Tabletop_Object_Dataset_Depth",
+                args={},
+            )
+        elif name == 'tabletop_object_dataset_rgbd':
+            # this stuff is hard-coded
+            return dict(
+                factory="Tabletop_Object_Dataset_RGBD",
+                args={},
             )
         raise RuntimeError("Dataset not available: {}".format(name))
 

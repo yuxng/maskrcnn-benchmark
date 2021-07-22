@@ -15,11 +15,11 @@ from .collate_batch import BatchCollator, BBoxAugCollator
 from .transforms import build_transforms
 
 
-def build_dataset(cfg, dataset_list, transforms, dataset_catalog, is_train=True):
+def build_dataset(dataset_list, transforms, dataset_catalog, is_train=True):
     """
     Arguments:
         dataset_list (list[str]): Contains the names of the datasets, i.e.,
-            coco_2014_trian, coco_2014_val, etc
+            coco_2014_train, coco_2014_val, etc
         transforms (callable): transforms to apply to each (image, target) sample
         dataset_catalog (DatasetCatalog): contains the information on how to
             construct a dataset.
@@ -40,8 +40,6 @@ def build_dataset(cfg, dataset_list, transforms, dataset_catalog, is_train=True)
             args["remove_images_without_annotations"] = is_train
         if data["factory"] == "PascalVOCDataset":
             args["use_difficult"] = not is_train
-        if data["factory"] == "YCBVideoDataset":
-            args["cfg"] = cfg
         args["transforms"] = transforms
         # make dataset from factory
         dataset = factory(**args)
@@ -107,7 +105,7 @@ def make_batch_data_sampler(
     return batch_sampler
 
 
-def make_data_loader(cfg, is_train=True, is_distributed=False, start_iter=0):
+def make_data_loader(cfg, is_train=True, is_distributed=False, start_iter=0, is_for_period=False):
     num_gpus = get_world_size()
     if is_train:
         images_per_batch = cfg.SOLVER.IMS_PER_BATCH
@@ -155,7 +153,7 @@ def make_data_loader(cfg, is_train=True, is_distributed=False, start_iter=0):
 
     # If bbox aug is enabled in testing, simply set transforms to None and we will apply transforms later
     transforms = None if not is_train and cfg.TEST.BBOX_AUG.ENABLED else build_transforms(cfg, is_train)
-    datasets = build_dataset(cfg, dataset_list, transforms, DatasetCatalog, is_train)
+    datasets = build_dataset(dataset_list, transforms, DatasetCatalog, is_train or is_for_period)
 
     if is_train:
         # save category_id to label name mapping
@@ -177,7 +175,7 @@ def make_data_loader(cfg, is_train=True, is_distributed=False, start_iter=0):
             collate_fn=collator,
         )
         data_loaders.append(data_loader)
-    if is_train:
+    if is_train or is_for_period:
         # during training, a single (possibly concatenated) data_loader is returned
         assert len(data_loaders) == 1
         return data_loaders[0]

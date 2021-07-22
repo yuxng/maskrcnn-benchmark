@@ -3,6 +3,7 @@
 Implements the Generalized R-CNN framework
 """
 
+import copy
 import torch
 from torch import nn
 
@@ -26,9 +27,19 @@ class GeneralizedRCNN(nn.Module):
     def __init__(self, cfg):
         super(GeneralizedRCNN, self).__init__()
 
+        self.input_type = cfg.INPUT.TYPE
         self.backbone = build_backbone(cfg)
-        self.rpn = build_rpn(cfg, self.backbone.out_channels)
-        self.roi_heads = build_roi_heads(cfg, self.backbone.out_channels)
+        if self.input_type == "RGBD-ADD" or self.input_type == "RGBD-CAT":
+            self.backbone_depth = copy.deepcopy(self.backbone)
+
+        if self.input_type == "RGBD-CAT":
+            scale = 2
+        else:
+            scale = 1
+
+        self.rpn = build_rpn(cfg, scale * self.backbone.out_channels)
+        self.roi_heads = build_roi_heads(cfg, scale * self.backbone.out_channels)
+
 
     def forward(self, images, targets=None):
         """
@@ -46,7 +57,21 @@ class GeneralizedRCNN(nn.Module):
         if self.training and targets is None:
             raise ValueError("In training mode, targets should be passed")
         images = to_image_list(images)
-        features = self.backbone(images.tensors)
+
+        # if RGBD fusion
+        if self.input_type == "RGBD-ADD" or self.input_type == "RGBD-CAT":
+            inputs = images.tensors
+            features = list(self.backbone(inputs[:, :3]))
+            features_depth = list(self.backbone_depth(inputs[:, 3:]))
+            if self.input_type == "RGBD-ADD":
+                for i in range(len(features)):
+                    features[i] = features[i] + features_depth[i]
+            else:
+                for i in range(len(features)):
+                    features[i] = torch.cat((features[i], features_depth[i]), 1)
+        else:
+            features = self.backbone(images.tensors)
+
         proposals, proposal_losses = self.rpn(images, features, targets)
         if self.roi_heads:
             x, result, detector_losses = self.roi_heads(features, proposals, targets)

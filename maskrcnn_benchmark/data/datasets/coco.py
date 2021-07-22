@@ -1,7 +1,6 @@
 # Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved.
 import torch
 import torchvision
-import sys
 
 from maskrcnn_benchmark.structures.bounding_box import BoxList
 from maskrcnn_benchmark.structures.segmentation_mask import SegmentationMask
@@ -74,26 +73,17 @@ class COCODataset(torchvision.datasets.coco.CocoDetection):
         anno = [obj for obj in anno if obj["iscrowd"] == 0]
 
         boxes = [obj["bbox"] for obj in anno]
-        print(len(boxes))
-        print(boxes[0])
         boxes = torch.as_tensor(boxes).reshape(-1, 4)  # guard against no boxes
-        print(boxes)
-        print(img.size)
         target = BoxList(boxes, img.size, mode="xywh").convert("xyxy")
 
         classes = [obj["category_id"] for obj in anno]
-        print(self.categories)
-        print(self.coco.getCatIds())
-        print(classes)
         classes = [self.json_category_id_to_contiguous_id[c] for c in classes]
-        print(classes)
         classes = torch.tensor(classes)
         target.add_field("labels", classes)
 
         if anno and "segmentation" in anno[0]:
             masks = [obj["segmentation"] for obj in anno]
             masks = SegmentationMask(masks, img.size, mode='poly')
-            print(masks)
             target.add_field("masks", masks)
 
         if anno and "keypoints" in anno[0]:
@@ -106,9 +96,6 @@ class COCODataset(torchvision.datasets.coco.CocoDetection):
         if self._transforms is not None:
             img, target = self._transforms(img, target)
 
-        print(img)
-        print(img.shape)
-        sys.exit(1)
         return img, target, idx
 
     def get_img_info(self, index):

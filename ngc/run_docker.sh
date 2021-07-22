@@ -1,0 +1,1 @@
+nvidia-docker run -it -v /home/yuxiang/GitLab/maskrcnn-benchmark:/home/yuxiang/GitLab/maskrcnn-benchmark -v /capri/tabletop_dataset_v5:/home/yuxiang/GitLab/maskrcnn-benchmark/data/tabletop --network host --shm-size 8G nvcr.io/nvidian/robotics/posecnn-pytorch:latest

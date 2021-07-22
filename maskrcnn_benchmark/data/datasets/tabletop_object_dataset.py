@@ -21,7 +21,7 @@ data_loading_params = {
     'img_height' : 480,
     'near' : 0.01,
     'far' : 100,
-    'fov' : 60, # vertical field of view in angles
+    'fov' : 45, # vertical field of view in angles
     
     'use_data_augmentation' : True,
 
@@ -30,7 +30,7 @@ data_loading_params = {
     'gamma_scale' : 0.001,
     
     # Additive noise
-    'gaussian_scale' : 0.01, # 1cm standard dev
+    'gaussian_scale' : 0.005, # 1cm standard dev
     'gp_rescale_factor' : 4,
     
     # Random ellipse dropout
@@ -47,11 +47,8 @@ data_loading_params = {
     'pixel_dropout_alpha' : 1., 
     'pixel_dropout_beta' : 10.,
     
-    # Input Modalities
-    'use_rgb' : False,
-    'use_depth' : True,
 }
-data_dir = '/data/tabletop_dataset_v2/training_set/'
+data_dir = 'data/tabletop/training_set/'
 
 
 
@@ -83,7 +80,6 @@ def compute_xyz(depth_img, camera_params):
         y_offset = camera_params['img_height']/2
 
     indices = util_.build_matrix_of_indices(camera_params['img_height'], camera_params['img_width'])
-    indices[..., 0] = np.flipud(indices[..., 0]) # pixel indices start at top-left corner. for OpenGL, it starts at bottom-left
     z_e = depth_img
     x_e = (indices[..., 1] - x_offset) * z_e / fx
     y_e = (indices[..., 0] - y_offset) * z_e / fy
@@ -100,6 +96,12 @@ def mask_to_tight_box(mask):
 NUM_VIEWS_PER_SCENE = 6 # background only is not trained on
 class Tabletop_Object_Dataset(Dataset):
 
+    CLASSES = (
+        "__background__ ",
+        "table",
+        "object",
+    )
+
     def __init__(self, transforms=None):
         # don't use transforms. that's just to satisfy the API
         self.base_dir = data_dir
@@ -110,13 +112,9 @@ class Tabletop_Object_Dataset(Dataset):
         self.len = len(self.scene_dirs) * NUM_VIEWS_PER_SCENE
 
         self.name = 'TableTop'
-
-        # This is not used
-        self.classid_to_name = {
-            0 : "background",
-            1 : "table",
-            2 : "object"
-        }
+        cls = Tabletop_Object_Dataset.CLASSES
+        self.class_to_ind = dict(zip(cls, range(len(cls))))
+        self.categories = dict(zip(range(len(cls)), cls))
 
     def __len__(self):
         return self.len
@@ -147,7 +145,7 @@ class Tabletop_Object_Dataset(Dataset):
             depth_img = data_augmentation.add_noise_to_depth(depth_img, self.params)
             depth_img = data_augmentation.dropout_random_ellipses(depth_img, self.params)
             # depth_img = data_augmentation.dropout_near_high_gradients(depth_img, seg_img, self.params)
-            depth_img = data_augmentation.dropout_random_pixels(depth_img, self.params)
+            # depth_img = data_augmentation.dropout_random_pixels(depth_img, self.params)
 
         # Compute xyz ordered point cloud
         xyz_img = compute_xyz(depth_img, self.params)
@@ -168,7 +166,7 @@ class Tabletop_Object_Dataset(Dataset):
         unique_nonnegative_indices = np.unique(labels)
 
         # Drop 0 if it's in there
-        if 0 == unique_nonnegative_indices[0]:
+        if unique_nonnegative_indices[0] == 0:
             unique_nonnegative_indices = unique_nonnegative_indices[1:]
         num_instances = unique_nonnegative_indices.shape[0]
         # NOTE: IMAGES WITH BACKGROUND ONLY HAVE NO INSTANCES
@@ -184,7 +182,7 @@ class Tabletop_Object_Dataset(Dataset):
             boxes[i, :] = np.array(mask_to_tight_box(binary_masks[..., i]))
 
         # Get labels for each mask
-        labels = unique_nonnegative_indices.clip(1,2)
+        labels = unique_nonnegative_indices.clip(1, 2)
 
         # Turn them into torch tensors
         boxes = data_augmentation.array_to_tensor(boxes)
@@ -205,22 +203,36 @@ class Tabletop_Object_Dataset(Dataset):
         view_num = idx % NUM_VIEWS_PER_SCENE + 1 # view_num=0 is always background with no table/objects
 
         # Label
-        seg_img_filename = scene_dir + f"segmentation_{view_num:05d}.png"
+        seg_img_filename = scene_dir + 'segmentation_%05d.png' % view_num
         seg_img = util_.imread_indexed(seg_img_filename)
         boxes, binary_masks, labels = self.process_label(seg_img)
         # boxes.shape: [num_instances x 4], binary_masks.shape: [num_instances x H x W], labels.shape: [num_instances]
 
         # RGB image
-        if self.params['use_rgb']:
-            rgb_img_filename = scene_dir + f"rgb_{view_num:05d}.jpeg"
+        if self.params['use_rgb'] and not self.params['use_depth']:
+            rgb_img_filename = scene_dir + 'rgb_%05d.jpeg' % view_num
             rgb_img = cv2.cvtColor(cv2.imread(rgb_img_filename), cv2.COLOR_BGR2RGB)
             img = self.process_rgb(rgb_img) # Shape: [3 x H x W]
 
         # Depth image
-        if self.params['use_depth']:
-            depth_img_filename = scene_dir + f"depth_{view_num:05d}.png"
+        if self.params['use_depth'] and not self.params['use_rgb']:
+            depth_img_filename = scene_dir + 'depth_%05d.png' % view_num
             depth_img = cv2.imread(depth_img_filename, cv2.IMREAD_ANYDEPTH) # This reads a 16-bit single-channel image. Shape: [H x W]
             img = self.process_depth(depth_img, labels) # Shape: [3 x H x W]
+
+        # RGB + Depth
+        if self.params['use_depth'] and self.params['use_rgb']:
+            rgb_img_filename = scene_dir + 'rgb_%05d.jpeg' % view_num
+            rgb_img = cv2.cvtColor(cv2.imread(rgb_img_filename), cv2.COLOR_BGR2RGB)
+            rgb_img = self.process_rgb(rgb_img) # Shape: [3 x H x W]
+
+            depth_img_filename = scene_dir + 'depth_%05d.png' % view_num
+            depth_img = cv2.imread(depth_img_filename, cv2.IMREAD_ANYDEPTH) # This reads a 16-bit single-channel image. Shape: [H x W]
+            depth_img = self.process_depth(depth_img, labels) # Shape: [3 x H x W]
+
+            # Concatenate these
+            img = torch.cat([rgb_img, depth_img], dim=0)
+
 
         # Create BoxList stuff
         target = BoxList(boxes, (self.params['img_width'], self.params['img_height']), mode="xyxy")
@@ -241,3 +253,28 @@ class Tabletop_Object_Dataset(Dataset):
                 "idx": idx
                }
 
+class Tabletop_Object_Dataset_RGB(Tabletop_Object_Dataset):
+
+    def __init__(self, transforms=None):
+        super(Tabletop_Object_Dataset_RGB, self).__init__(transforms)
+        self.params['use_rgb'] = True
+        self.params['use_depth'] = False
+        self.name = 'TableTop_RGB'
+
+
+class Tabletop_Object_Dataset_Depth(Tabletop_Object_Dataset):
+
+    def __init__(self, transforms=None):
+        super(Tabletop_Object_Dataset_Depth, self).__init__(transforms)
+        self.params['use_rgb'] = False
+        self.params['use_depth'] = True
+        self.name = 'TableTop_Depth'
+
+
+class Tabletop_Object_Dataset_RGBD(Tabletop_Object_Dataset):
+
+    def __init__(self, transforms=None):
+        super(Tabletop_Object_Dataset_RGBD, self).__init__(transforms)
+        self.params['use_rgb'] = True
+        self.params['use_depth'] = True
+        self.name = 'TableTop_RGBD'
